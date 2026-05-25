@@ -1,7 +1,3 @@
-# os-sandbox
-A collection of laboratory exercises focusing on core Operating System concepts, implemented in C++ within a Linux environment.
-
-
 # 🖥️ Operating Systems - Core Concepts & Lab Exercises
 
 [![Language](https://img.shields.io/badge/Language-C%2B%2B-blue.svg)](https://isocpp.org/)

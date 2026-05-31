@@ -45,7 +45,36 @@ This exercise focuses on how operating systems handle asynchronous events throug
 ---
 
 ### 🧵 Lab 2: Process Management
-*(Popuni detalje kada završiš vježbu - npr. Kreiranje procesa pomoću `fork()`, zamjena slika procesa kroz `exec`, i sinkronizacija roditelj-dijete procesa)*
+
+This exercise explores the fundamental paradigms of multitasking (*višezadaćni rad*) within Unix-like systems, deeply contrasting the execution, memory footprints, and synchronization requirements of multi-threading versus multi-processing.
+
+### 👥 Lab 2a: Multi-Threading & Strict Alternation (`lab2_dretve`)
+This sub-exercise implements lightweight concurrency within a single process address space using the POSIX Threads (`pthread`) library to demonstrate predictable, coordinated execution between threads.
+
+* **Memory Architecture:** Demonstrates how threads inherently share global data, heap segments, and open file descriptors, while maintaining their own isolated stack segments (`STACK`).
+* **Strict Alternation:** Employs a shared state variable (`red_na_potezu`) to synchronize a producer thread (generating random data into a shared array) and a consumer thread (calculating the sum).
+* **Synchronization & Reentrancy:** Implements synchronization via **busy waiting (spin-locking)**. Incorporates the concept of thread-safety (*multi-thread-safe*) and explains why variables accessed across threads should be declared using atomic types (`atomic` / `volatile`) to prevent compiler reordering optimizations.
+
+**Compilation & Execution:**
+```bash
+gcc -pthread lab2_dretve.c -o lab2_dretve
+./lab2_dretve <N_elements> <M_iterations>
+```
+
+### 👥 Lab 2b: Multi-Processing & Shared Memory (`lab2_dretve`)
+This sub-exercise implements true parallel multi-processing across completely isolated execution environments.
+
+* **Process Isolation:** Spawns independent child processes using the (`fork()`) system call, resulting in distinct address spaces separated by a Copy-on-Write (COW) mechanism.
+* **Shared Memory Segment:** Allocates and maps a System V shared memory block (zajednički adresni prostor) using kernel system calls (`shmget, shmat, shmdt, shmctl`) to bypass process isolation.
+* **Mutual Exclusion:** Implements Lamport's Bakery Algorithm entirely at the software level to protect the Critical Section (C.S.) without relying on hardware-level atomic locks.
+
+**Compilation & Execution:**
+```bash
+gcc lab2_procesi.c -o lab2_procesi
+./lab2_procesi <number_of_processes>
+```
+
+> 💡 **Interview Takeaway:** Gained a deep architectural understanding of the trade-offs between lightweight threads (zero memory isolation overhead, high risk of race conditions) and heavyweight processes (hardware-isolated address spaces requiring kernel-level IPC structures). Successfully managed persistent kernel memory allocations and prevented data corruption by implementing low-level software synchronization primitives.
 
 ---
 

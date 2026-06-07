@@ -79,8 +79,23 @@ gcc lab2_procesi.c -o lab2_procesi
 ---
 
 ### 🔒 Lab 3: Thread Synchronization
-*(Popuni detalje kada završiš vježbu - npr. Problem proizvođača i potrošača, filozofi na večeri, korištenje mutexa i semafora)*
+🔒 Lab 3: Thread & Process Synchronization
 
+This exercise deeply explores classic synchronization problems in concurrent programming. It showcases how to prevent data corruption, race conditions, and deadlocks using semaphores across two different paradigms: multi-threading (POSIX) and multi-processing (System V IPC).
+
+👥 Lab 3a: Multi-Threaded Producer-Consumer (lab3_dretve)
+
+This sub-exercise implements a variant of the classic Producer-Consumer problem using POSIX threads within a single process address space, utilizing POSIX semaphores for thread coordination.
+
+* **Architecture & Flow:** A single producer thread dynamically generates random tasks (numbers) and places them into a shared variable (`globalni_broj`), while multiple worker threads ($m$ instances) compete to safely fetch and process (calculate the sum of numbers) the tasks.
+* **Synchronization Primitives:** * `sem_prazan` & `sem_pun`: Used as signaling mechanisms to coordinate the production and consumption phases, ensuring the producer doesn't overwrite data before it's read, and workers don't read stale data.
+  * `sem_mutex`: Acts as a binary semaphore (mutex) protecting the Critical Section (C.S.) when worker threads check the global termination flag (`kraj`) and copy the shared task locally.
+* **Compilation & Execution:**
+  ```bash
+  gcc -pthread lab3_dretve.c -o lab3_dretve
+  ./lab3_dretve <number_of_workers> <number_of_tasks>
+
+  
 ---
 
 ### 🧠 Lab 4: Memory Management

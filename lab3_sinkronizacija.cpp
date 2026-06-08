@@ -1,124 +1,148 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
-#include <semaphore.h>
-#include <time.h>
 #include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
+#include <sys/wait.h>
+#include <signal.h>
 
-long long globalni_broj = -1;
-int kraj = 0;
+#define PUN    0  
+#define PISI   1  
+#define PRAZAN 2 
 
-sem_t sem_prazan; 
-sem_t sem_pun;    
-sem_t sem_mutex;  
+struct dijeljeno {
+    int ULAZ;
+    int IZLAZ;
+    int UKUPNO;
+    int M[5];
+};
 
-typedef struct {
-    int id;
-} dretva_podaci;
+int ShmId, SemId;
+struct dijeljeno *Zajednicko = NULL;
 
-void* dretva_generiraj(void* arg) {
-    int ukupno_zadataka = *(int*)arg;
-    printf("Dretva koja generira zadatke pocela je s radom. Broj zadataka=%d\n", ukupno_zadataka);
+struct sembuf smanji = {0, -1, 0};
+struct sembuf povecaj = {0, 1, 0};
 
-    for (int i = 0; i < ukupno_zadataka; i++) {
-        sem_wait(&sem_prazan);
-
-        globalni_broj = ((long long)rand() % 1000000000) + 1;
-        printf("Generiran broj %lld\n", globalni_broj);
-
-        sem_post(&sem_pun);
+void oslobodi_resurse(int sig) {
+    if (Zajednicko != NULL && Zajednicko != (void *)-1) {
+        shmdt(Zajednicko);
     }
-
-    sem_wait(&sem_prazan);
-    
-    kraj = 1;
-    
-    return NULL;
+    if (ShmId >= 0) {
+        shmctl(ShmId, IPC_RMID, NULL);
+    }
+    if (SemId >= 0) {
+        semctl(SemId, 0, IPC_RMID, 0);
+    }
+    if (sig != 0) {
+        exit(1);
+    }
 }
+void Proizvodjac(int id, int n) {
+    for (int i = 0; i < n; i++) {
+        int slucajni_broj = (rand() % 1000) + 1;
 
-void* dretva_racunaj(void* arg) {
-    int id = ((dretva_podaci*)arg)->id;
-    printf("Dretva %d pocela je s radom.\n", id);
-
-    while (1) {
-        sem_wait(&sem_pun);
-
-        sem_wait(&sem_mutex);
+        smanji.sem_num = PUN; 
+        semop(SemId, &smanji, 1);
         
-        if (kraj) {
-            sem_post(&sem_mutex);
-            break;
-        }
+        smanji.sem_num = PISI; 
+        semop(SemId, &smanji, 1);
 
-        long long lokalni_broj = globalni_broj;
-        printf("Dretva %d. preuzela zadatak %lld\n", id, lokalni_broj);
+        Zajednicko->M[Zajednicko->ULAZ] = slucajni_broj;
+        printf("Proizvodac %d salje \"%d\"\n", id, slucajni_broj);
+        fflush(stdout);
+        
+        Zajednicko->ULAZ = (Zajednicko->ULAZ + 1) % 5;
+        
+        usleep(100000); 
 
-        sem_post(&sem_prazan);
-        sem_post(&sem_mutex);
-
-        unsigned long long zbroj = 0;
-        for (long long i = 1; i <= lokalni_broj; i++) {
-            zbroj += i;
-        }
-
-        printf("Dretva %d. zadatak=%lld zbroj=%llu\n", id, lokalni_broj, zbroj);
+        povecaj.sem_num = PISI; 
+        semop(SemId, &povecaj, 1);
+        
+        povecaj.sem_num = PRAZAN; 
+        semop(SemId, &povecaj, 1);
     }
 
-    return NULL;
+    printf("Proizvodac %d zavrsio sa slanjem\n", id);
+    fflush(stdout);
+    exit(0);
+}
+void Potrosac() {
+    int zbroj = 0;
+    int ukupno = Zajednicko->UKUPNO;
+
+    for (int i = 0; i < ukupno; i++) {
+        smanji.sem_num = PRAZAN; 
+        semop(SemId, &smanji, 1);
+
+        int uzeti_broj = Zajednicko->M[Zajednicko->IZLAZ];
+        zbroj += uzeti_broj;
+        printf("Potrosac prima %d\n", uzeti_broj);
+        fflush(stdout);
+
+        Zajednicko->IZLAZ = (Zajednicko->IZLAZ + 1) % 5;
+        
+        usleep(150000);
+
+        povecaj.sem_num = PUN; 
+        semop(SemId, &povecaj, 1);
+    }
+    printf("Potrosac - zbroj primljenih brojeva=%d\n", zbroj);
+    fflush(stdout);
+    exit(0);
 }
 
-int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        printf("Uporaba: %s <broj_radnih_dretvi (m)> <broj_zadataka (n)>\n", argv[0]);
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
+        fprintf(stderr, "Koristenje: %s <broj_proizvodjaca> <broj_brojeva>\n", argv[0]);
         return 1;
     }
+    int broj_proizvodjaca = atoi(argv[1]);
+    int broj_brojeva = atoi(argv[2]);
 
-    int m = atoi(argv[1]); 
-    int n = atoi(argv[2]); 
-
-    if (m <= 0 || n <= 0) {
-        printf("Argumenti moraju biti pozitivni cijeli brojevi veći od nule.\n");
+    if (broj_proizvodjaca <= 0 || broj_brojeva <= 0) {
+        fprintf(stderr, "Argumenti moraju biti veci od 0.\n");
         return 1;
     }
-
-    srand(time(NULL));
-
-    sem_init(&sem_prazan, 0, 1); 
-    sem_init(&sem_pun, 0, 0);    
-    sem_init(&sem_mutex, 0, 1); 
-
-    pthread_t dretva_gen;
-    pthread_t* radne_dretve = malloc(m * sizeof(pthread_t));
-    dretva_podaci* podaci = malloc(m * sizeof(dretva_podaci));
-
-    if (radne_dretve == NULL || podaci == NULL) {
-        perror("Greška kod alokacije memorije");
-        return 1;
-    }
-
-    pthread_create(&dretva_gen, NULL, dretva_generiraj, &n);
-
-    for (int i = 0; i < m; i++) {
-        podaci[i].id = i + 1;
-        pthread_create(&radne_dretve[i], NULL, dretva_racunaj, &podaci[i]);
-    }
-
-    pthread_join(dretva_gen, NULL);
-
-    for (int i = 0; i < m; i++) {
-        sem_post(&sem_pun);
-    }
-
-    for (int i = 0; i < m; i++) {
-        pthread_join(radne_dretve[i], NULL);
-    }
-
-    sem_destroy(&sem_prazan);
-    sem_destroy(&sem_pun);
-    sem_destroy(&sem_mutex);
     
-    free(radne_dretve);
-    free(podaci);
+    struct sigaction sa;
+    sa.sa_handler = oslobodi_resurse;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
 
+    ShmId = shmget(IPC_PRIVATE, sizeof(struct dijeljeno), 0600);
+    if (ShmId < 0) {
+        perror("shmget");
+        return 1;
+    }
+    Zajednicko = (struct dijeljeno *)shmat(ShmId, NULL, 0);
+    Zajednicko->ULAZ = 0;
+    Zajednicko->IZLAZ = 0;
+    Zajednicko->UKUPNO = broj_proizvodjaca * broj_brojeva;
+
+    SemId = semget(IPC_PRIVATE, 3, 0600);
+    if (SemId < 0) {
+        perror("semget");
+        shmctl(ShmId, IPC_RMID, NULL);
+        return 1;
+    }
+    semctl(SemId, PUN, SETVAL, 5);     
+    semctl(SemId, PISI, SETVAL, 1);    
+    semctl(SemId, PRAZAN, SETVAL, 0);  
+
+    if (fork() == 0) {
+        Potrosac();
+    }
+    for (int i = 0; i < broj_proizvodjaca; i++) {
+        if (fork() == 0) {
+            srand(getpid()); 
+            Proizvodjac(i + 1, broj_brojeva);
+        }
+    }
+    for (int i = 0; i < broj_proizvodjaca + 1; i++) {
+        wait(NULL);
+    }
+    oslobodi_resurse(0);
     return 0;
 }

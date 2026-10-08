@@ -99,12 +99,12 @@ This sub-exercise implements a variant of the classic Producer-Consumer problem 
 ---
 
 ### 🧠 Lab 4: Memory Management
-*(Popuni detalje kada završiš vježbu - npr. Simulacija stranične organizacije memorije ili LRU algoritma)*
+*(Simulacija stranične organizacije memorije ili LRU algoritma- uskoro više detalja)*
 
 ---
 
 ### 📁 Lab 5: File Systems
-*(Popuni detalje kada završiš vježbu)*
+*(Uskoro)*
 
 ---
 
